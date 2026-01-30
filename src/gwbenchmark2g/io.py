@@ -143,6 +143,9 @@ def _parse_metadata_dict(data: dict) -> dict:
         if key == "injection_parameters":
             # Convert list of tuples back to dict (or None if empty/null)
             parsed[key] = dict(value) if value else None
+        elif key == "fixed_parameters":
+            # Convert list of tuples back to dict (or None if empty/null)
+            parsed[key] = dict(value) if value else None
         elif key == "waveform_kwargs":
             # Reconstruct from structured format (floats/ints/strings)
             if isinstance(value, dict) and (
