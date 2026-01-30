@@ -56,6 +56,8 @@ def simulate_level_0(
         per-detector metadata, e.g., frequency bounds.
 
     """
+    if config.level != 0:
+        raise ValueError("Config level must be 0 for level 0 simulation.")
     bilby.core.utils.random.seed(config.seed)
     dist = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
     for key, parameters in (config.fixed_parameters or {}).items():
