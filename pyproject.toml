@@ -14,6 +14,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+gwbenchmark2g = "gwbenchmark2g.cli:main"
+
 [tool.setuptools_scm]
 
 [tool.setuptools.package-dir]
