@@ -41,7 +41,7 @@ INJECTION_METADATA_SCHEMA = pa.schema(
             nullable=False,
         ),
         # int
-        pa.field("seed", pa.int64(), nullable=False),
+        pa.field("seed", pa.int64(), nullable=True),
         # dict[str, dict[str, float]]
         pa.field(
             "detectors",
