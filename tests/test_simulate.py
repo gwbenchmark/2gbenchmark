@@ -28,6 +28,41 @@ def test_simulate_level0_doesnt_contain_truth_with_blinding():
         assert metadata.injection_parameters is None
 
 
+def test_level0_fixed_parameters():
+    """Test that Level0Config fixed parameters are correctly applied."""
+    cfg = config.Level0Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=4,
+        seed=42,
+    )
+
+    # Expected fixed parameter values for Level 0
+    expected_fixed = {
+        "geocent_time": -0.01621880385450652,
+        "phase": 0.0,
+        "psi": 0.0,
+        "theta_jn": 0.0,
+        "dec": 2.058804189275143,
+        "ra": -1.595801372295631,
+    }
+
+    # Verify config has the correct fixed parameters
+    assert cfg.fixed_parameters == expected_fixed
+
+    # Verify that simulations actually use these fixed values
+    for data, metadata in simulate.simulate_level_0(cfg):
+        injection_params = metadata.injection_parameters
+        assert injection_params is not None
+
+        # Check each fixed parameter has the expected value
+        for param_name, expected_value in expected_fixed.items():
+            assert param_name in injection_params
+            assert injection_params[param_name] == expected_value, (
+                f"{param_name} should be fixed to {expected_value}, got {injection_params[param_name]}"
+            )
+
+
 def test_save_many_simulations_metadata_to_parquet():
     """Test saving metadata from many simulations to parquet format."""
     cfg = config.Level0Config(
