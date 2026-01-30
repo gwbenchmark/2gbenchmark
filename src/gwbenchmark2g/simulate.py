@@ -54,8 +54,9 @@ def simulate_level_0(
 
     """
     bilby.core.utils.random.seed(config.seed)
-    dist = bilby.gw.prior.BBHPriorDict()
-    dist["geocent_time"] = 0
+    dist = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
+    for key, parameters in (config.fixed_parameters or {}).items():
+        dist[key] = parameters
     ifos = bilby.gw.detector.InterferometerList(config.detectors)
     wfg = bilby.gw.waveform_generator.WaveformGenerator(
         frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole,

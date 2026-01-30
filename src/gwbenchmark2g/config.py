@@ -15,14 +15,22 @@ class DatasetConfig(BaseModel):
     seed: int
     blind: bool = False
     n_simulations: int
+    fixed_parameters: dict[str, float] | None = None
 
 
 class Level0Config(DatasetConfig):
-    pass
+    fixed_parameters: dict[str, float] = dict(
+        geocent_time=-0.01621880385450652,
+        phase=0.0,
+        psi=0.0,
+        theta_jn=0.0,
+        dec=2.058804189275143,
+        ra=-1.595801372295631,
+    )
 
 
 class Level1Config(DatasetConfig):
-    pass
+    fixed_parameters: dict[str, float] = dict(geocent_time=0.0)
 
 
 level_registry = {
