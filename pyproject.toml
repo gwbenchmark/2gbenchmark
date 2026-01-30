@@ -14,6 +14,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+gwbenchmark2g = "gwbenchmark2g.cli:main"
+
 [tool.setuptools_scm]
 
 [tool.setuptools.package-dir]
@@ -21,3 +24,7 @@ gwbenchmark2g = "src/gwbenchmark2g"
 
 [dependency-groups]
 test = ["pytest>7"]
+dev = [
+    {include-group = "test"},
+    "pre-commit",
+]

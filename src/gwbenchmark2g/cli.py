@@ -3,11 +3,10 @@
 import argparse
 from pathlib import Path
 
-import pyarrow as pa
-import pyarrow.parquet as pq
+import numpy as np
 import yaml
 
-from .io import INJECTION_METADATA_SCHEMA
+from .io import save_metadata
 
 
 def get_parser():
@@ -27,9 +26,10 @@ def get_parser():
         help="",
     )
     parser.add_argument(
-        "--filename",
+        "--output-dir",
         type=Path,
-        help="Output filename for the generated dataset.",
+        default=Path("."),
+        help="Output directory for the generated dataset.",
     )
     return parser
 
@@ -55,10 +55,13 @@ def main():
 
     all_metadata = list()
 
-    # Save data to .npy file and metadata to a parquet file
-    for data, metadata in simulate_function(config):
-        all_metadata.append(metadata)
-        # Save the data
+    # Create output directory if it doesn't exist
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    table = pa.Table.from_pylist([all_metadata], schema=INJECTION_METADATA_SCHEMA)
-    pq.write_table(table, "injection_metadata.parquet")
+    # Save data to .npy file and metadata to a parquet file
+    for ii, (data, metadata) in enumerate(simulate_function(config)):
+        all_metadata.append(metadata)
+        np.savez(output_dir / f"simulation_{ii}.npz", data=data)
+
+    save_metadata(all_metadata, output_dir / "injection_metadata.parquet")
