@@ -3,7 +3,7 @@
 This may move to gwbenchmark in the future.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class DatasetConfig(BaseModel):
@@ -28,9 +28,19 @@ class Level0Config(DatasetConfig):
         ra=-1.595801372295631,
     )
 
+    @computed_field
+    @property
+    def level(self) -> int:
+        return 0
+
 
 class Level1Config(DatasetConfig):
     fixed_parameters: dict[str, float] = dict(geocent_time=0.0)
+
+    @computed_field
+    @property
+    def level(self) -> int:
+        return 1
 
 
 level_registry = {
