@@ -3,11 +3,9 @@
 import argparse
 from pathlib import Path
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 import yaml
 
-from .io import INJECTION_METADATA_SCHEMA
+from .io import save_metadata
 
 
 def get_parser():
@@ -60,5 +58,4 @@ def main():
         all_metadata.append(metadata)
         # Save the data
 
-    table = pa.Table.from_pylist([all_metadata], schema=INJECTION_METADATA_SCHEMA)
-    pq.write_table(table, "injection_metadata.parquet")
+    save_metadata(all_metadata, "injection_metadata.parquet")

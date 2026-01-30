@@ -21,3 +21,7 @@ gwbenchmark2g = "src/gwbenchmark2g"
 
 [dependency-groups]
 test = ["pytest>7"]
+dev = [
+    {include-group = "test"},
+    "pre-commit",
+]
