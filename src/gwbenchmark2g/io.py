@@ -55,6 +55,10 @@ INJECTION_METADATA_SCHEMA = pa.schema(
         pa.field("duration", pa.float64(), nullable=False),
         # float
         pa.field("sampling_frequency", pa.float64(), nullable=False),
+        # float | None
+        pa.field("network_optimal_snr", pa.float64(), nullable=True),
+        # float | None
+        pa.field("network_matched_filter_snr", pa.float64(), nullable=True),
     ]
 )
 

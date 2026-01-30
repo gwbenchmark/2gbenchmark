@@ -100,3 +100,81 @@ def test_save_many_simulations_metadata_to_parquet():
         for i in range(10):
             row_metadata = read_single_metadata(parquet_path, i)
             assert row_metadata == all_metadata[i]
+
+
+def test_snr_extraction_in_metadata():
+    """Test that SNR values are correctly extracted from Bilby interferometers."""
+    cfg = config.Level0Config(
+        n_simulations=3,
+        sampling_frequency=2048,
+        duration=4,
+        seed=123,
+    )
+
+    for data, metadata in simulate.simulate_level_0(cfg):
+        # Check network SNR values exist and are positive
+        assert metadata.network_optimal_snr is not None
+        assert metadata.network_matched_filter_snr is not None
+
+        # Check that we have SNR values for each detector
+        assert len(metadata.detectors) > 0
+        for detector_name, detector_meta in metadata.detectors.items():
+            assert "optimal_snr" in detector_meta
+            assert "matched_filter_snr" in detector_meta
+            assert detector_meta["optimal_snr"] is not None
+            assert detector_meta["matched_filter_snr"] is not None
+
+
+def test_snr_blinding():
+    """Test that SNR values are None when blinding is enabled."""
+    cfg = config.Level0Config(
+        n_simulations=2,
+        sampling_frequency=2048,
+        duration=4,
+        seed=456,
+        blind=True,
+    )
+
+    for data, metadata in simulate.simulate_level_0(cfg):
+        # Check network SNR values are None when blinded
+        assert metadata.network_optimal_snr is None
+        assert metadata.network_matched_filter_snr is None
+
+        # Check that detector SNR values are also None
+        for detector_name, detector_meta in metadata.detectors.items():
+            assert detector_meta["optimal_snr"] is None
+            assert detector_meta["matched_filter_snr"] is None
+
+
+def test_network_snr_consistency():
+    """Test that network SNR is consistent with individual detector SNRs."""
+    cfg = config.Level0Config(
+        n_simulations=2,
+        sampling_frequency=2048,
+        duration=4,
+        seed=789,
+    )
+
+    for data, metadata in simulate.simulate_level_0(cfg):
+        # Calculate network SNR from individual detector SNRs
+        # Network SNR should be sqrt(sum of squares of individual SNRs)
+        optimal_snrs_squared = sum(
+            detector_meta["optimal_snr"] ** 2
+            for detector_meta in metadata.detectors.values()
+        )
+        calculated_network_optimal = optimal_snrs_squared**0.5
+
+        # For matched filter SNR, we sum the squares of the real parts
+        matched_filter_snrs_squared = sum(
+            detector_meta["matched_filter_snr"] ** 2
+            for detector_meta in metadata.detectors.values()
+        )
+        calculated_network_matched_filter = matched_filter_snrs_squared**0.5
+
+        # Check that calculated network SNR matches stored network SNR
+        # Allow for small numerical differences
+        assert abs(metadata.network_optimal_snr - calculated_network_optimal) < 1e-6
+        assert (
+            abs(metadata.network_matched_filter_snr - calculated_network_matched_filter)
+            < 1e-6
+        )
