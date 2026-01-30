@@ -14,6 +14,11 @@ INJECTION_METADATA_SCHEMA = pa.schema(
             pa.map_(pa.string(), pa.float64()),
             nullable=True,  # allow None for blinding
         ),
+        pa.field(
+            "fixed_parameters",
+            pa.map_(pa.string(), pa.float64()),
+            nullable=True,
+        ),
         # dict[str, int | float | str]
         # Arrow cannot store heterogeneous map values directly,
         # so we split them into separate typed maps.

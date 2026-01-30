@@ -25,6 +25,7 @@ class FrequencyDomainInterferometerData:
 @dataclass
 class InjectionMetaData:
     injection_parameters: dict[str, float] | None  # allow none to enable blinding
+    fixed_parameters: dict[str, float] | None
     waveform_kwargs: dict[str, int | float | str]
     seed: int
     detectors: dict[str, dict]
@@ -96,6 +97,7 @@ def simulate_level_0(
             detectors=dict(),
             seed=config.seed if not config.blind else None,
             duration=config.duration,
+            fixed_parameters=config.fixed_parameters,
             sampling_frequency=config.sampling_frequency,
             network_optimal_snr=network_optimal_snr,
             network_matched_filter_snr=network_matched_filter_snr,
