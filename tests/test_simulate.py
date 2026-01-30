@@ -111,5 +111,7 @@ def test_simulate_level0_invalid_config():
         duration=4,
         seed=10,
     )
-    with pytest.raises(ValueError, match="Config level must be 0 for level 0 simulation."):
+    with pytest.raises(
+        ValueError, match="Config level must be 0 for level 0 simulation."
+    ):
         next(simulate.simulate_level_0(cfg))
