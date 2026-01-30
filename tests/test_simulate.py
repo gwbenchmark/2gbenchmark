@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+import pytest
 
 from gwbenchmark2g import simulate, config
 from gwbenchmark2g.io import save_metadata, read_metadata, read_single_metadata
@@ -100,3 +101,17 @@ def test_save_many_simulations_metadata_to_parquet():
         for i in range(10):
             row_metadata = read_single_metadata(parquet_path, i)
             assert row_metadata == all_metadata[i]
+
+
+def test_simulate_level0_invalid_config():
+    """Test that simulate_level_0 raises ValueError for invalid config level."""
+    cfg = config.Level1Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=4,
+        seed=10,
+    )
+    with pytest.raises(
+        ValueError, match="Config level must be 0 for level 0 simulation."
+    ):
+        next(simulate.simulate_level_0(cfg))
