@@ -14,6 +14,11 @@ INJECTION_METADATA_SCHEMA = pa.schema(
             pa.map_(pa.string(), pa.float64()),
             nullable=True,  # allow None for blinding
         ),
+        pa.field(
+            "fixed_parameters",
+            pa.map_(pa.string(), pa.float64()),
+            nullable=True,
+        ),
         # dict[str, int | float | str]
         # Arrow cannot store heterogeneous map values directly,
         # so we split them into separate typed maps.
@@ -55,6 +60,10 @@ INJECTION_METADATA_SCHEMA = pa.schema(
         pa.field("duration", pa.float64(), nullable=False),
         # float
         pa.field("sampling_frequency", pa.float64(), nullable=False),
+        # float | None
+        pa.field("network_optimal_snr", pa.float64(), nullable=True),
+        # float | None
+        pa.field("network_matched_filter_snr", pa.float64(), nullable=True),
     ]
 )
 
@@ -132,6 +141,9 @@ def _parse_metadata_dict(data: dict) -> dict:
 
     for key, value in data.items():
         if key == "injection_parameters":
+            # Convert list of tuples back to dict (or None if empty/null)
+            parsed[key] = dict(value) if value else None
+        elif key == "fixed_parameters":
             # Convert list of tuples back to dict (or None if empty/null)
             parsed[key] = dict(value) if value else None
         elif key == "waveform_kwargs":
