@@ -60,6 +60,9 @@ def simulate_level_0(
         raise ValueError("Config level must be 0 for level 0 simulation.")
     bilby.core.utils.random.seed(config.seed)
     dist = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
+    dist["luminosity_distance"] = bilby.gw.prior.UniformSourceFrame(
+        name="luminosity_distance", minimum=1750.0, maximum=2250.0
+    )
     for key, parameters in (config.fixed_parameters or {}).items():
         dist[key] = parameters
     ifos = bilby.gw.detector.InterferometerList(config.detectors)
