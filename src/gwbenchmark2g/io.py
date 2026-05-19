@@ -68,6 +68,28 @@ INJECTION_METADATA_SCHEMA = pa.schema(
 )
 
 
+def _split_waveform_kwargs(kwargs: dict) -> dict:
+    """Split a flat waveform-kwargs dict into typed maps for the parquet schema."""
+    typed = {"ints": {}, "floats": {}, "strings": {}}
+    for key, value in kwargs.items():
+        if isinstance(value, int):
+            typed["ints"][key] = value
+        elif isinstance(value, float):
+            typed["floats"][key] = value
+        else:
+            typed["strings"][key] = value
+    return typed
+
+
+def _parse_map(value):
+    """Convert a PyArrow map-like value to a Python dict."""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    return dict(value)
+
+
 def save_metadata(metadata: list, filepath: str | Path) -> None:
     """Save a list of InjectionMetaData objects to a parquet file.
 
@@ -79,6 +101,8 @@ def save_metadata(metadata: list, filepath: str | Path) -> None:
         Path where the parquet file will be saved
     """
     metadata_dicts = [asdict(m) for m in metadata]
+    for record in metadata_dicts:
+        record["waveform_kwargs"] = _split_waveform_kwargs(record["waveform_kwargs"])
     table = pa.Table.from_pylist(metadata_dicts, schema=INJECTION_METADATA_SCHEMA)
     pq.write_table(table, filepath)
 
@@ -153,8 +177,7 @@ def _parse_metadata_dict(data: dict) -> dict:
             ):
                 reconstructed = {}
                 for category in ["ints", "floats", "strings"]:
-                    if category in value and value[category]:
-                        reconstructed.update(value[category])
+                    reconstructed.update(_parse_map(value.get(category)))
                 parsed[key] = reconstructed
             else:
                 parsed[key] = value
