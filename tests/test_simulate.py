@@ -103,6 +103,23 @@ def test_save_many_simulations_metadata_to_parquet():
             assert row_metadata == all_metadata[i]
 
 
+def test_waveform_kwargs_round_trip():
+    """Non-empty waveform_kwargs must survive the parquet round-trip."""
+    md = simulate.InjectionMetaData(
+        injection_parameters={"chirp_mass": 30.0},
+        fixed_parameters={"phase": 0.0},
+        waveform_kwargs={"waveform_approximant": "IMRPhenomXAS"},
+        seed=1,
+        detectors={},
+        duration=4.0,
+        sampling_frequency=2048.0,
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "metadata.parquet"
+        save_metadata([md], path)
+        assert read_metadata(path)[0].waveform_kwargs == md.waveform_kwargs
+
+
 def test_snr_extraction_in_metadata():
     """Test that SNR values are correctly extracted from Bilby interferometers."""
     cfg = config.Level0Config(

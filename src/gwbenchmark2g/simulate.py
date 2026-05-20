@@ -70,6 +70,7 @@ def simulate_level_0(
         frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole,
         duration=config.duration,
         sampling_frequency=config.sampling_frequency,
+        waveform_arguments=dict(waveform_approximant=config.waveform_approximant),
     )
     for _ in range(config.n_simulations):
         parameters = dist.sample()
