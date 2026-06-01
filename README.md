@@ -155,6 +155,7 @@ simulation with the following fields:
 | Field                    | Type                            | Description                                                             |
 |--------------------------|---------------------------------|-------------------------------------------------------------------------|
 | `injection_parameters`   | `map<string, float64>`          | True source parameters of the injected signal (null if `blind=true`)    |
+| `waveform_kwargs`        | `struct{ints, floats, strings}` | Extra arguments passed to the waveform generator
 | `fixed_parameters`       | `map<string, float64>`          | Parameters held fixed for the level (null for Level 1 defaults)         |
 | `waveform_approximant`   | `string`                        | Waveform approximant requested by the dataset config                    |
 | `seed`                   | `int64`                         | Random seed used for the simulation                                     |
