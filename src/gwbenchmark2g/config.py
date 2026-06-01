@@ -8,14 +8,15 @@ from pydantic import BaseModel, computed_field, field_validator
 
 
 class DetectorNetworkConfig(BaseModel):
-
     detector_combinations: list[tuple[str, ...]]
     weights: list[float] | None = None
 
     def sample_network(self, rng: np.random.Generator) -> list[str]:
         if self.weights is not None:
             if len(self.weights) != len(self.detector_combinations):
-                raise ValueError("Length of weights must match length of detector_combinations.")
+                raise ValueError(
+                    "Length of weights must match length of detector_combinations."
+                )
             probabilities = [weight / sum(self.weights) for weight in self.weights]
             selected_combination = rng.choice(
                 len(self.detector_combinations), p=probabilities
@@ -57,7 +58,7 @@ class Level0Config(DatasetConfig):
 
 
 class Level1Config(DatasetConfig):
-    waveform_approximant: str = "IMRPhenomHM"
+    waveform_approximant: str = "IMRPhenomXHM"
     fixed_parameters: dict[str, float] | None = None
     geocent_time_range: tuple[float, float] = (-0.1, 0.1)
     detectors: DetectorNetworkConfig = DetectorNetworkConfig(
