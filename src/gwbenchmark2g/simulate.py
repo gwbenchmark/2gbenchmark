@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Generator
 
 import bilby
-import numpy as np
 
 from .config import DatasetConfig, Level0Config, Level1Config
 
@@ -37,6 +37,12 @@ class InjectionMetaData:
     network_label: str | None = None
     network_optimal_snr: float | None = None
     network_matched_filter_snr: float | None = None
+
+
+@lru_cache
+def _get_ifos(detectors: list[str]) -> bilby.gw.detector.InterferometerList:
+    ifos = bilby.gw.detector.InterferometerList(detectors)
+    return ifos
 
 
 def _simulate_dataset(
@@ -76,12 +82,6 @@ def _simulate_dataset(
     for key, parameters in (config.fixed_parameters or {}).items():
         dist[key] = parameters
 
-    if isinstance(config.detectors, list):
-        detectors = config.detectors
-    else:
-        detectors = config.detectors.sample_network(bilby.core.utils.random.rng)
-
-    ifos = bilby.gw.detector.InterferometerList(detectors)
     wfg = bilby.gw.waveform_generator.WaveformGenerator(
         frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole,
         duration=config.duration,
@@ -89,6 +89,13 @@ def _simulate_dataset(
         waveform_arguments=dict(waveform_approximant=config.waveform_approximant),
     )
     for _ in range(config.n_simulations):
+        # Sample a detector network for this simulation
+        if isinstance(config.detectors, list):
+            detectors = config.detectors
+        else:
+            detectors = config.detectors.sample_network(bilby.core.utils.random.rng)
+        ifos = _get_ifos(tuple(detectors))
+
         parameters = dist.sample()
         wfg.start_time = parameters["geocent_time"] - config.duration + 2
         ifos.set_strain_data_from_power_spectral_densities(
@@ -143,7 +150,9 @@ def _simulate_dataset(
         yield data, metadata
 
 
-def simulate_level_0(config: Level0Config) -> Generator[
+def simulate_level_0(
+    config: Level0Config,
+) -> Generator[
     tuple[dict[str, FrequencyDomainInterferometerData], dict[str, Any]], None, None
 ]:
     """Simulate a level 0 benchmark dataset."""
@@ -152,7 +161,9 @@ def simulate_level_0(config: Level0Config) -> Generator[
     yield from _simulate_dataset(config)
 
 
-def simulate_level_1(config: Level1Config) -> Generator[
+def simulate_level_1(
+    config: Level1Config,
+) -> Generator[
     tuple[dict[str, FrequencyDomainInterferometerData], dict[str, Any]], None, None
 ]:
     """Simulate a level 1 benchmark dataset."""
