@@ -71,13 +71,12 @@ Create a YAML configuration file, e.g. `level1_config.yaml`:
 seed: 42
 n_simulations: 100
 duration: 8.0
-networks:
-  - detectors: [H1, L1, V1]
-    weight: 1.0
-  - detectors: [H1, L1]
-    weight: 1.0
-  - detectors: [H1]
-    weight: 1.0
+detectors:
+  detector_combinations:
+    - [H1, L1, V1]
+    - [H1, L1]
+    - [H1]
+  weights: [1.0, 1.0, 1.0]
 ```
 
 Level 1 defaults:
@@ -86,7 +85,7 @@ Level 1 defaults:
 |-------------------------|----------------------------------------|-------------|
 | `waveform_approximant`  | `IMRPhenomXHM`                          | Waveform model with higher-order multipoles |
 | `geocent_time_range`    | `[-0.1, 0.1]`                          | Uniform absolute merger-time sampling window |
-| `networks`              | `[{detectors: [H1, L1, V1], weight: 1}, ...]` | Allowed detector subsets and their relative sampling weights |
+| `detectors`             | `{detector_combinations: [[H1, L1, V1], [H1, L1], [H1]], weights: [1, 1, 1]}` | Allowed detector subsets and their relative sampling weights |
 | `fixed_parameters`      | `null`                                 | No Level 0-style fixed extrinsic parameters |
 
 Run the CLI:
