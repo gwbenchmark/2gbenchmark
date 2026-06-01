@@ -55,7 +55,7 @@ gwbenchmark2g --config level0_config.yaml --level 0 --output-dir output_level0
 | Level | IFOs | Waveform | Physics |
 |-------|------|----------|---------|
 | 0 | H1-L1-V1 | IMRPhenomXAS | Aligned spins, fixed sky location and time |
-| 1 | H1-L1-V1/H1-L1/H1 | IMRPhenomHM | Aligned spins with higher-order multipoles, all parameters randomized. Different detector combinations. |
+| 1 | H1-L1-V1/H1-L1/H1 | IMRPhenomXHM | Aligned spins with higher-order multipoles, all parameters randomized. Different detector combinations. |
 
 ## Quick start — generating a Level 1 dataset
 
@@ -84,7 +84,7 @@ Level 1 defaults:
 
 | Parameter               | Default                                | Description |
 |-------------------------|----------------------------------------|-------------|
-| `waveform_approximant`  | `IMRPhenomHM`                          | Waveform model with higher-order multipoles |
+| `waveform_approximant`  | `IMRPhenomXHM`                          | Waveform model with higher-order multipoles |
 | `geocent_time_range`    | `[-0.1, 0.1]`                          | Uniform absolute merger-time sampling window |
 | `networks`              | `[{detectors: [H1, L1, V1], weight: 1}, ...]` | Allowed detector subsets and their relative sampling weights |
 | `fixed_parameters`      | `null`                                 | No Level 0-style fixed extrinsic parameters |
