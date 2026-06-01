@@ -1,6 +1,8 @@
 import tempfile
 from pathlib import Path
+
 import pytest
+from pydantic import ValidationError
 
 from gwbenchmark2g import simulate, config
 from gwbenchmark2g.io import save_metadata, read_metadata, read_single_metadata
@@ -64,6 +66,58 @@ def test_level0_fixed_parameters():
             )
 
 
+def test_level1_config_defaults():
+    cfg = config.Level1Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=8,
+        seed=42,
+    )
+
+    assert cfg.waveform_approximant == "IMRPhenomHM"
+    assert cfg.fixed_parameters is None
+    assert cfg.geocent_time_range == (-0.1, 0.1)
+    assert [network.detectors for network in cfg.detectors] == [
+        ["H1", "L1", "V1"],
+        ["H1", "L1"],
+        ["H1"],
+    ]
+    assert [network.weight for network in cfg.detectors] == [1.0, 1.0, 1.0]
+
+
+def test_level1_config_validation():
+    with pytest.raises(ValidationError):
+        config.Level1Config(
+            n_simulations=1,
+            seed=1,
+            detectors=[{"detectors": ["H1", "L1", "K1"], "weight": 1.0}],
+        )
+
+    with pytest.raises(ValidationError):
+        config.Level1Config(
+            n_simulations=1,
+            seed=1,
+            detectors=[{"detectors": ["H1"], "weight": 0.0}],
+        )
+
+    with pytest.raises(ValidationError):
+        config.Level1Config(
+            n_simulations=1,
+            seed=1,
+            geocent_time_range=(0.1, -0.1),
+        )
+
+    with pytest.raises(ValidationError):
+        config.Level1Config(
+            n_simulations=1,
+            seed=1,
+            detectors=[
+                {"detectors": ["L1", "H1"], "weight": 1.0},
+                {"detectors": ["H1", "L1"], "weight": 1.0},
+            ],
+        )
+
+
 def test_save_many_simulations_metadata_to_parquet():
     """Test saving metadata from many simulations to parquet format."""
     cfg = config.Level0Config(
@@ -118,6 +172,26 @@ def test_waveform_kwargs_round_trip():
         path = Path(tmpdir) / "metadata.parquet"
         save_metadata([md], path)
         assert read_metadata(path)[0].waveform_kwargs == md.waveform_kwargs
+        
+
+def test_save_many_level1_simulations_metadata_to_parquet():
+    cfg = config.Level1Config(
+        n_simulations=6,
+        sampling_frequency=2048,
+        duration=8,
+        seed=42,
+    )
+
+    all_metadata = [metadata for _, metadata in simulate.simulate_level_1(cfg)]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        parquet_path = Path(tmpdir) / "metadata.parquet"
+        save_metadata(all_metadata, parquet_path)
+
+        read_metadata_list = read_metadata(parquet_path)
+        assert len(read_metadata_list) == len(all_metadata)
+        for original, read_back in zip(all_metadata, read_metadata_list):
+            assert original == read_back
 
 
 def test_snr_extraction_in_metadata():
@@ -210,3 +284,113 @@ def test_simulate_level0_invalid_config():
         ValueError, match="Config level must be 0 for level 0 simulation."
     ):
         next(simulate.simulate_level_0(cfg))
+
+
+def test_simulate_level1():
+    cfg = config.Level1Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=8,
+        seed=10,
+    )
+    for data, metadata in simulate.simulate_level_1(cfg):
+        assert metadata.level == 1
+        assert metadata.network_label in {"H1-L1-V1", "H1-L1", "H1"}
+        assert metadata.waveform_approximant == "IMRPhenomHM"
+        assert set(data) == set(metadata.network_label.split("-"))
+
+
+def test_level1_randomizes_level0_extrinsics():
+    cfg = config.Level1Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=8,
+        seed=42,
+        detectors=[{"detectors": ["H1", "L1", "V1"], "weight": 1.0}],
+    )
+
+    observed = []
+    for _, metadata in simulate.simulate_level_1(cfg):
+        injection_params = metadata.injection_parameters
+        assert injection_params is not None
+        assert -0.1 <= injection_params["geocent_time"] <= 0.1
+        observed.append(injection_params)
+
+    assert any(params["phase"] != 0.0 for params in observed)
+    assert any(params["psi"] != 0.0 for params in observed)
+    assert any(params["theta_jn"] != 0.0 for params in observed)
+    assert any(params["dec"] != 2.058804189275143 for params in observed)
+    assert any(params["ra"] != -1.595801372295631 for params in observed)
+
+
+def test_level1_detector_network_matches_sampled_network():
+    cfg = config.Level1Config(
+        n_simulations=6,
+        sampling_frequency=2048,
+        duration=8,
+        seed=13,
+    )
+
+    for data, metadata in simulate.simulate_level_1(cfg):
+        expected_detectors = set(metadata.network_label.split("-"))
+        assert set(data) == expected_detectors
+        assert set(metadata.detectors) == expected_detectors
+
+
+def test_level1_network_sampling_uses_all_nonzero_weight_networks():
+    cfg = config.Level1Config(
+        n_simulations=30,
+        sampling_frequency=2048,
+        duration=8,
+        seed=99,
+    )
+
+    observed_networks = {
+        metadata.network_label for _, metadata in simulate.simulate_level_1(cfg)
+    }
+    assert observed_networks == {network.label for network in cfg.detectors}
+
+
+def test_level1_network_sampling_respects_degenerate_weights():
+    cfg = config.Level1Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=8,
+        seed=77,
+        detectors=[{"detectors": ["H1"], "weight": 1.0}],
+    )
+
+    observed_networks = [
+        metadata.network_label for _, metadata in simulate.simulate_level_1(cfg)
+    ]
+    assert observed_networks == ["H1"] * len(observed_networks)
+
+
+def test_simulate_level1_doesnt_contain_truth_with_blinding():
+    cfg = config.Level1Config(
+        n_simulations=3,
+        sampling_frequency=2048,
+        duration=8,
+        seed=10,
+        blind=True,
+    )
+    for _, metadata in simulate.simulate_level_1(cfg):
+        assert metadata.injection_parameters is None
+        assert metadata.network_optimal_snr is None
+        assert metadata.network_matched_filter_snr is None
+        for detector_meta in metadata.detectors.values():
+            assert detector_meta["optimal_snr"] is None
+            assert detector_meta["matched_filter_snr"] is None
+
+
+def test_simulate_level1_invalid_config():
+    cfg = config.Level0Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=4,
+        seed=10,
+    )
+    with pytest.raises(
+        ValueError, match="Config level must be 1 for level 1 simulation."
+    ):
+        next(simulate.simulate_level_1(cfg))
