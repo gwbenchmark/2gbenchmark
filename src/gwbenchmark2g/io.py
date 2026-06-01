@@ -19,7 +19,32 @@ INJECTION_METADATA_SCHEMA = pa.schema(
             pa.map_(pa.string(), pa.float64()),
             nullable=True,
         ),
-        pa.field("waveform_approximant", pa.string(), nullable=False),
+        # dict[str, int | float | str]
+        # Arrow cannot store heterogeneous map values directly,
+        # so we split them into separate typed maps.
+        pa.field(
+            "waveform_kwargs",
+            pa.struct(
+                [
+                    pa.field(
+                        "ints",
+                        pa.map_(pa.string(), pa.int64()),
+                        nullable=False,
+                    ),
+                    pa.field(
+                        "floats",
+                        pa.map_(pa.string(), pa.float64()),
+                        nullable=False,
+                    ),
+                    pa.field(
+                        "strings",
+                        pa.map_(pa.string(), pa.string()),
+                        nullable=False,
+                    ),
+                ]
+            ),
+            nullable=False,
+        ),
         # int
         pa.field("seed", pa.int64(), nullable=True),
         # dict[str, dict[str, float]]
