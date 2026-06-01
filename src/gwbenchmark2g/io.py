@@ -19,32 +19,7 @@ INJECTION_METADATA_SCHEMA = pa.schema(
             pa.map_(pa.string(), pa.float64()),
             nullable=True,
         ),
-        # dict[str, int | float | str]
-        # Arrow cannot store heterogeneous map values directly,
-        # so we split them into separate typed maps.
-        pa.field(
-            "waveform_kwargs",
-            pa.struct(
-                [
-                    pa.field(
-                        "ints",
-                        pa.map_(pa.string(), pa.int64()),
-                        nullable=False,
-                    ),
-                    pa.field(
-                        "floats",
-                        pa.map_(pa.string(), pa.float64()),
-                        nullable=False,
-                    ),
-                    pa.field(
-                        "strings",
-                        pa.map_(pa.string(), pa.string()),
-                        nullable=False,
-                    ),
-                ]
-            ),
-            nullable=False,
-        ),
+        pa.field("waveform_approximant", pa.string(), nullable=False),
         # int
         pa.field("seed", pa.int64(), nullable=True),
         # dict[str, dict[str, float]]
@@ -60,6 +35,8 @@ INJECTION_METADATA_SCHEMA = pa.schema(
         pa.field("duration", pa.float64(), nullable=False),
         # float
         pa.field("sampling_frequency", pa.float64(), nullable=False),
+        pa.field("level", pa.int64(), nullable=True),
+        pa.field("network_label", pa.string(), nullable=True),
         # float | None
         pa.field("network_optimal_snr", pa.float64(), nullable=True),
         # float | None
@@ -195,6 +172,8 @@ def _parse_metadata_dict(data: dict) -> dict:
                         dict(det_data) if isinstance(det_data, list) else det_data
                     )
             parsed[key] = detectors
+        elif key in {"level", "network_label"}:
+            parsed[key] = value
         else:
             parsed[key] = value
 
