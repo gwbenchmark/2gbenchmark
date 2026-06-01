@@ -4,7 +4,7 @@ from typing import Any, Generator
 import bilby
 import numpy as np
 
-from .config import DatasetConfig, Level1Config, Level1NetworkConfig
+from .config import DatasetConfig, Level0Config, Level1Config
 
 ArrayLike = Any  # Placeholder for actual type once gwbenchmark.types is available
 
@@ -28,7 +28,7 @@ class FrequencyDomainInterferometerData:
 class InjectionMetaData:
     injection_parameters: dict[str, float] | None  # allow none to enable blinding
     fixed_parameters: dict[str, float] | None
-    waveform_approximant: str
+    waveform_kwargs: dict[str, int | float | str]
     seed: int | None
     detectors: dict[str, dict]
     duration: float
@@ -39,73 +39,66 @@ class InjectionMetaData:
     network_matched_filter_snr: float | None = None
 
 
-def _create_prior(
+def _simulate_dataset(
     config: DatasetConfig,
-    *,
-    geocent_time_range: tuple[float, float] | None = None,
-) -> bilby.gw.prior.BBHPriorDict:
+) -> Generator[
+    tuple[dict[str, FrequencyDomainInterferometerData], dict[str, Any]], None, None
+]:
+    """Simulate a level 0 benchmark dataset.
+
+    Parameters
+    ----------
+    config : DatasetConfig
+        Configuration parameters for the simulation.
+
+    Yields
+    ------
+    data: dict[str, FrequencyDomainInterferometerData]
+        Dictionary of data in each detector
+    metadata: dict[str, Any]
+        Information about the injected parameters, random seed, and
+        per-detector metadata, e.g., frequency bounds.
+
+    """
+    bilby.core.utils.random.seed(config.seed)
     dist = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
     dist["luminosity_distance"] = bilby.gw.prior.UniformSourceFrame(
         name="luminosity_distance", minimum=1750.0, maximum=2250.0
     )
-    if geocent_time_range is not None:
-        minimum, maximum = geocent_time_range
-        dist["geocent_time"] = bilby.core.prior.Uniform(
-            minimum=minimum,
-            maximum=maximum,
+
+    if config.geocent_time_range is not None:
+        dist["geocent_time"] = bilby.gw.prior.Uniform(
             name="geocent_time",
+            minimum=config.geocent_time_range[0],
+            maximum=config.geocent_time_range[1],
         )
+
     for key, parameters in (config.fixed_parameters or {}).items():
         dist[key] = parameters
-    return dist
 
+    if isinstance(config.detectors, list):
+        detectors = config.detectors
+    else:
+        detectors = config.detectors.sample_network(bilby.core.utils.random.rng)
 
-def _create_waveform_generator(config: DatasetConfig):
-    return bilby.gw.waveform_generator.WaveformGenerator(
+    ifos = bilby.gw.detector.InterferometerList(detectors)
+    wfg = bilby.gw.waveform_generator.WaveformGenerator(
         frequency_domain_source_model=bilby.gw.source.lal_binary_black_hole,
         duration=config.duration,
         sampling_frequency=config.sampling_frequency,
-        waveform_arguments={"waveform_approximant": config.waveform_approximant},
+        waveform_arguments=dict(waveform_approximant=config.waveform_approximant),
     )
-
-
-def _sample_network_label(config: Level1Config, rng: np.random.Generator) -> str:
-    labels = [network.label for network in config.detectors]
-    weights = np.asarray([network.weight for network in config.detectors])
-    probabilities = weights / weights.sum()
-    return str(rng.choice(labels, p=probabilities))
-
-
-def _get_level1_network(config: Level1Config, label: str) -> Level1NetworkConfig:
-    for network in config.detectors:
-        if network.label == label:
-            return network
-    raise KeyError(f"Unknown Level 1 network label {label!r}")
-
-
-def _simulate_dataset(
-    config: DatasetConfig,
-    *,
-    level: int,
-    prior: bilby.gw.prior.BBHPriorDict,
-    network_selector,
-) -> Generator[tuple[dict[str, FrequencyDomainInterferometerData], InjectionMetaData], None, None]:
-    bilby.core.utils.random.seed(config.seed)
-    waveform_generator = _create_waveform_generator(config)
-
     for _ in range(config.n_simulations):
-        parameters = prior.sample()
-        detectors, network_label = network_selector()
-        ifos = bilby.gw.detector.InterferometerList(detectors)
-        start_time = parameters["geocent_time"] - config.duration + 2
-        waveform_generator.start_time = start_time
+        parameters = dist.sample()
+        wfg.start_time = parameters["geocent_time"] - config.duration + 2
         ifos.set_strain_data_from_power_spectral_densities(
             duration=config.duration,
             sampling_frequency=config.sampling_frequency,
-            start_time=start_time,
+            start_time=parameters["geocent_time"] - config.duration + 2,
         )
-        ifos.inject_signal(waveform_generator=waveform_generator, parameters=parameters)
+        ifos.inject_signal(waveform_generator=wfg, parameters=parameters)
 
+        # Calculate network SNRs from individual detector SNRs
         if not config.blind:
             network_optimal_snr = (
                 sum(ifo.meta_data["optimal_SNR"] ** 2 for ifo in ifos) ** 0.5
@@ -119,15 +112,15 @@ def _simulate_dataset(
             network_matched_filter_snr = None
 
         metadata = InjectionMetaData(
-            injection_parameters=parameters if not config.blind else None,
-            fixed_parameters=config.fixed_parameters,
-            waveform_approximant=config.waveform_approximant,
-            seed=config.seed if not config.blind else None,
+            injection_parameters=parameters
+            if not config.blind
+            else None,  # this feels ugly, maybe we need a function to strip metadata out instead
+            waveform_kwargs=wfg.waveform_arguments,
             detectors=dict(),
+            seed=config.seed if not config.blind else None,
             duration=config.duration,
+            fixed_parameters=config.fixed_parameters,
             sampling_frequency=config.sampling_frequency,
-            level=level,
-            network_label=network_label,
             network_optimal_snr=network_optimal_snr,
             network_matched_filter_snr=network_matched_filter_snr,
         )
@@ -150,57 +143,22 @@ def _simulate_dataset(
         yield data, metadata
 
 
-def simulate_level_0(
-    config: DatasetConfig,
-) -> Generator[
-    tuple[dict[str, FrequencyDomainInterferometerData], InjectionMetaData], None, None
+def simulate_level_0(config: Level0Config) -> Generator[
+    tuple[dict[str, FrequencyDomainInterferometerData], dict[str, Any]], None, None
 ]:
-    """Simulate a level 0 benchmark dataset.
-
-    Parameters
-    ----------
-    config : DatasetConfig
-        Configuration parameters for the simulation.
-
-    Yields
-    ------
-    data: dict[str, FrequencyDomainInterferometerData]
-        Dictionary of data in each detector
-    metadata: dict[str, Any]
-        Information about the injected parameters, random seed, and
-        per-detector metadata, e.g., frequency bounds.
-
-    """
+    """Simulate a level 0 benchmark dataset."""
     if config.level != 0:
         raise ValueError("Config level must be 0 for level 0 simulation.")
-    prior = _create_prior(config)
-    yield from _simulate_dataset(
-        config,
-        level=0,
-        prior=prior,
-        network_selector=lambda: (config.detectors, "-".join(config.detectors)),
-    )
+    yield from _simulate_dataset(config)
 
 
-def simulate_level_1(
-    config: Level1Config,
-) -> Generator[
-    tuple[dict[str, FrequencyDomainInterferometerData], InjectionMetaData], None, None
+def simulate_level_1(config: Level1Config) -> Generator[
+    tuple[dict[str, FrequencyDomainInterferometerData], dict[str, Any]], None, None
 ]:
     """Simulate a level 1 benchmark dataset."""
     if config.level != 1:
         raise ValueError("Config level must be 1 for level 1 simulation.")
-    prior = _create_prior(config, geocent_time_range=config.geocent_time_range)
-    rng = np.random.default_rng(config.seed)
-    yield from _simulate_dataset(
-        config,
-        level=1,
-        prior=prior,
-        network_selector=lambda: (
-            _get_level1_network(config, label := _sample_network_label(config, rng)).detectors,
-            label,
-        ),
-    )
+    yield from _simulate_dataset(config)
 
 
 simulate_registry = {
