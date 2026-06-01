@@ -50,6 +50,54 @@ Run the CLI:
 gwbenchmark2g --config level0_config.yaml --level 0 --output-dir output_level0
 ```
 
+## Level definitions
+
+| Level | IFOs | Waveform | Physics |
+|-------|------|----------|---------|
+| 0 | H1-L1-V1 | IMRPhenomXAS | Aligned spins, fixed sky location and time |
+| 1 | H1-L1-V1/H1-L1/H1 | IMRPhenomXHM | Aligned spins with higher-order multipoles, all parameters randomized. Different detector combinations. |
+
+## Quick start — generating a Level 1 dataset
+
+Level 1 extends the benchmark to randomized extrinsic parameters, higher-order
+multipoles, and mixed detector networks. The coalescence time is sampled
+uniformly in `[-0.1, 0.1]`, while the segment start follows the same convention
+as Level 0 so that the merger remains `duration - 2` seconds after segment
+start.
+
+Create a YAML configuration file, e.g. `level1_config.yaml`:
+
+```yaml
+seed: 42
+n_simulations: 100
+duration: 8.0
+detectors:
+  detector_combinations:
+    - [H1, L1, V1]
+    - [H1, L1]
+    - [H1]
+  weights: [1.0, 1.0, 1.0]
+```
+
+Level 1 defaults:
+
+| Parameter               | Default                                | Description |
+|-------------------------|----------------------------------------|-------------|
+| `waveform_approximant`  | `IMRPhenomXHM`                          | Waveform model with higher-order multipoles |
+| `geocent_time_range`    | `[-0.1, 0.1]`                          | Uniform absolute merger-time sampling window |
+| `detectors`             | `{detector_combinations: [[H1, L1, V1], [H1, L1], [H1]], weights: [1, 1, 1]}` | Allowed detector subsets and their relative sampling weights |
+| `fixed_parameters`      | `null`                                 | No Level 0-style fixed extrinsic parameters |
+
+Run the CLI:
+
+```bash
+gwbenchmark2g --config level1_config.yaml --level 1 --output-dir output_level1
+```
+
+Each Level 1 simulation may contain a different detector subset. The selected
+network is recorded in the metadata as `network_label`, and the strain file only
+contains the detectors active for that simulation.
+
 ## Output format
 
 The output directory will contain:
@@ -106,11 +154,15 @@ simulation with the following fields:
 | Field                    | Type                            | Description                                                             |
 |--------------------------|---------------------------------|-------------------------------------------------------------------------|
 | `injection_parameters`   | `map<string, float64>`          | True source parameters of the injected signal (null if `blind=true`)    |
-| `waveform_kwargs`        | `struct{ints, floats, strings}` | Extra arguments passed to the waveform generator                        |
+| `waveform_kwargs`        | `struct{ints, floats, strings}` | Extra arguments passed to the waveform generator
+| `fixed_parameters`       | `map<string, float64>`          | Parameters held fixed for the level (null for Level 1 defaults)         |
+| `waveform_approximant`   | `string`                        | Waveform approximant requested by the dataset config                    |
 | `seed`                   | `int64`                         | Random seed used for the simulation                                     |
 | `detectors`              | `map<string, map<string, float64>>` | Per-detector metadata (e.g. `minimum_frequency`, `maximum_frequency`) |
 | `duration`               | `float64`                       | Segment duration in seconds                                             |
 | `sampling_frequency`     | `float64`                       | Sampling rate in Hz                                                     |
+| `level`                  | `int64`                         | Benchmark level used for the simulation                                 |
+| `network_label`          | `string`                        | Detector network selected for this simulation                           |
 
 The `injection_parameters` dictionary contains the physical parameters of the
 simulated source. For Level 0, the free (non-fixed) parameters are:
@@ -123,7 +175,9 @@ simulated source. For Level 0, the free (non-fixed) parameters are:
   along the orbital angular momentum axis
 
 The remaining parameters (`geocent_time`, `phase`, `psi`, `theta_jn`, `dec`,
-`ra`) are held at fixed values in Level 0.
+`ra`) are held at fixed values in Level 0. In Level 1, these parameters are
+sampled from the prior instead, with `geocent_time` restricted to the configured
+`geocent_time_range`.
 
 Example usage:
 

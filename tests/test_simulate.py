@@ -17,15 +17,18 @@ def test_simulate_level0():
         continue
 
 
-def test_simulate_level0_doesnt_contain_truth_with_blinding():
-    cfg = config.Level0Config(
-        n_simulations=5,
+@pytest.mark.parametrize("LevelConfig", [config.Level0Config, config.Level1Config])
+def test_simulate_blinding(LevelConfig):
+    cfg = LevelConfig(
+        n_simulations=2,
         sampling_frequency=2048,
         duration=4,
         seed=10,
         blind=True,
     )
-    for data, metadata in simulate.simulate_level_0(cfg):
+
+    simulate_fn = getattr(simulate, f"simulate_level_{cfg.level}")
+    for data, metadata in simulate_fn(cfg):
         assert metadata.injection_parameters is None
 
 
@@ -210,3 +213,38 @@ def test_simulate_level0_invalid_config():
         ValueError, match="Config level must be 0 for level 0 simulation."
     ):
         next(simulate.simulate_level_0(cfg))
+
+
+def test_simulate_level1():
+    """Test that simulate_level_1 runs without errors and produces expected output."""
+    cfg = config.Level1Config(
+        n_simulations=10,
+        sampling_frequency=2048,
+        duration=4,
+        seed=42,
+    )
+    detector_combinations = set()
+    for data, metadata in simulate.simulate_level_1(cfg):
+        assert data is not None
+        assert metadata is not None
+        print(f"Simulated with detectors: {metadata.detectors.keys()}")
+        detector_combinations.add(tuple(sorted(metadata.detectors.keys())))
+
+    # Check that we have multiple different detector combinations in the simulations
+    assert len(detector_combinations) > 1, (
+        "Expected multiple different detector combinations in the simulations"
+    )
+
+
+def test_simulate_level1_invalid_config():
+    """Test that simulate_level_1 raises ValueError for invalid config level."""
+    cfg = config.Level0Config(
+        n_simulations=5,
+        sampling_frequency=2048,
+        duration=4,
+        seed=10,
+    )
+    with pytest.raises(
+        ValueError, match="Config level must be 1 for level 1 simulation."
+    ):
+        next(simulate.simulate_level_1(cfg))
