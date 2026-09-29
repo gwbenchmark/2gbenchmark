@@ -9,7 +9,7 @@ from pydantic import BaseModel, computed_field
 class DatasetConfig(BaseModel):
     duration: float = 4.0
     sampling_frequency: float = 2048.0
-    waveform_approximant: str = "IMRPhenomD"
+    waveform_approximant: str = "IMRPhenomXAS"
     detectors: list[str] = ["H1", "L1", "V1"]
     """List of detectors to simulate data for."""
     seed: int

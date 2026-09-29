@@ -40,7 +40,7 @@ Level 0:
 |-------------------------|----------------|--------------------------------------------------|
 | `duration`              | 4.0 s          | Length of each data segment                       |
 | `sampling_frequency`    | 2048.0 Hz      | Sampling rate (Nyquist frequency = 1024 Hz)       |
-| `waveform_approximant`  | `IMRPhenomD`   | Waveform model used to generate signals           |
+| `waveform_approximant`  | `IMRPhenomXAS`   | Waveform model used to generate signals           |
 | `detectors`             | `[H1, L1, V1]` | Detector network                                 |
 | `blind`                 | `false`        | If true, injection parameters are hidden from output |
 
