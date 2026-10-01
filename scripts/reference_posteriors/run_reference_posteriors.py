@@ -26,14 +26,20 @@ NPZ_GENERATION = str(Path(__file__).resolve().parent / "npz_generation.py")
 
 def use_npz_generation(npz_directory):
     """Run generation jobs via npz_generation.py, passing them the npz directory."""
-    GenerationNode.executable = property(lambda self: NPZ_GENERATION)
-
     base_setup_arguments = GenerationNode.setup_arguments
+
+    def executable(self):
+        # Swap the generation executable to python so we can run
+        # npz_generation.py instead of bilby_pipe's default generation script.
+        # This could be changed if this script was made an executable itself.
+        return self._get_executable_path("python")
 
     def setup_arguments(self, *args, **kwargs):
         base_setup_arguments(self, *args, **kwargs)
+        self.arguments.argument_list.insert(0, NPZ_GENERATION)
         self.arguments.add("npz-directory", npz_directory)
 
+    GenerationNode.executable = property(executable)
     GenerationNode.setup_arguments = setup_arguments
 
 
