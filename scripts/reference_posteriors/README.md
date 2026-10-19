@@ -35,6 +35,34 @@ and that launches the 1000 jobs on the cluster. Results land in `outdir_level0/`
 If you want to try it on a couple of events first, drop `n-simulation` in
 `level0.ini` to e.g. 2 before running.
 
+## Running inside a container
+
+To run every job inside an Apptainer/Singularity image, add `--container`:
+
+```bash
+python run_reference_posteriors.py level0.ini --npz-directory /path/to/level0 \
+    --container /path/to/image.sif
+```
+
+- **HTCondor** (`scheduler = condor`): uses bilby_pipe's own container support,
+  so the submit files ask HTCondor to run each job in the image (the exact
+  lines depend on the bilby_pipe version). What is visible inside the container is
+  set by the cluster, so the npz directory and this folder need to be on a
+  filesystem the cluster mounts into containers. `--bind` does nothing here.
+  The script prints a warning listing the folders that need to be visible.
+- **Slurm** (`scheduler = slurm`): each job script runs its command through
+  `apptainer exec`. The npz directory, this folder and the run directory are
+  bound automatically; add `--bind PATH` (repeatable) for anything else. The
+  compute nodes need `apptainer` on the `PATH` (add `scheduler-module` to the
+  `.ini` if it has to be loaded), and `scheduler-env` can't be used with it.
+
+Pass the image with `--container`, not `container =` in the `.ini`, and don't
+set `conda-env`.
+
+Run `run_reference_posteriors.py` itself inside the same image, e.g.
+`apptainer exec image.sif python run_reference_posteriors.py ...`, then submit
+from the host, since `sbatch`/`condor_submit_dag` aren't in the container.
+
 ## A few things to know
 
 - **The npz directory goes on the command line, not in the `.ini`.** Kept out of 
