@@ -1,0 +1,13 @@
+mass_1 = Constraint(minimum=5, maximum=100, name='mass_1', latex_label='$m_1$', unit=None)
+mass_2 = Constraint(minimum=5, maximum=100, name='mass_2', latex_label='$m_2$', unit=None)
+mass_ratio = bilby.gw.prior.UniformInComponentsMassRatio(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None, boundary=None, equal_mass=False)
+chirp_mass = bilby.gw.prior.UniformInComponentsChirpMass(minimum=25, maximum=100, name='chirp_mass', latex_label='$\\mathcal{M}$', unit=None, boundary=None)
+luminosity_distance = bilby.gw.prior.UniformSourceFrame(minimum=1750.0, maximum=2250.0, cosmology='Planck15', name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+dec = 2.058804189275143
+ra = -1.595801372295631
+theta_jn = 0.0
+psi = 0.0
+phase = 0.0
+chi_1 = bilby.gw.prior.AlignedSpin(a_prior=Uniform(minimum=0, maximum=0.99, name=None, latex_label=None, unit=None, boundary=None), z_prior=Uniform(minimum=-1, maximum=1, name=None, latex_label=None, unit=None, boundary=None), name='chi_1', latex_label='$\\chi_1$', unit=None, boundary=None, minimum=-0.99, maximum=0.99, num_interp=100000)
+chi_2 = bilby.gw.prior.AlignedSpin(a_prior=Uniform(minimum=0, maximum=0.99, name=None, latex_label=None, unit=None, boundary=None), z_prior=Uniform(minimum=-1, maximum=1, name=None, latex_label=None, unit=None, boundary=None), name='chi_2', latex_label='$\\chi_2$', unit=None, boundary=None, minimum=-0.99, maximum=0.99, num_interp=100000)
+geocent_time = -0.01621880385450652
