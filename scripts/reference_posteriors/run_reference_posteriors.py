@@ -69,10 +69,11 @@ def use_condor_binds(binds):
     base_create_job = Node.create_pycondor_job
 
     def create_job(self):
-        if self.inputs.scheduler.lower() == "condor" and self.inputs.container is not None:
-            self.extra_lines.append(
-                "+SingularityBind = " + json.dumps(" ".join(binds))
-            )
+        if (
+            self.inputs.scheduler.lower() == "condor"
+            and self.inputs.container is not None
+        ):
+            self.extra_lines.append("+SingularityBind = " + json.dumps(" ".join(binds)))
         return base_create_job(self)
 
     Node.create_pycondor_job = create_job
@@ -87,7 +88,10 @@ def use_container_executables():
     base_get_executable_path = Node._get_executable_path
 
     def _get_executable_path(self, exe_name):
-        if self.inputs.container is not None and self.inputs.scheduler.lower() == "condor":
+        if (
+            self.inputs.container is not None
+            and self.inputs.scheduler.lower() == "condor"
+        ):
             executable = shutil.which(exe_name)
             if executable is None:
                 raise BilbyPipeError(
@@ -167,11 +171,17 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--npz-directory", required=True)
     parser.add_argument("--container", default=None)
-    parser.add_argument("--start-index", type=int, default=0,
-                        help="First NPZ index; n-simulation specifies the number of events")
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="First NPZ index; n-simulation specifies the number of events",
+    )
     parser.add_argument("--bind", action="append", default=[])
     parser.add_argument(
-        "--condor-bind", action="append", default=[],
+        "--condor-bind",
+        action="append",
+        default=[],
         help="Request a mount via the pool-specific SingularityBind job attribute",
     )
     args, remaining = parser.parse_known_args()

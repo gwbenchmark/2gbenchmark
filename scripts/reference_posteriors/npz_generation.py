@@ -50,7 +50,9 @@ class NpzDataGenerationInput(DataGenerationInput):
         """Attach available truth without requiring it for blinded datasets."""
         metadata_file = self.npz_directory / "injection_metadata.parquet"
         if not metadata_file.is_file():
-            logger.info("No injection metadata file; leaving injection parameters unset")
+            logger.info(
+                "No injection metadata file; leaving injection parameters unset"
+            )
             return
 
         from gwbenchmark2g.io import read_single_metadata_raw

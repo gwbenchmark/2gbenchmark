@@ -84,7 +84,9 @@ def test_strain_and_psd_match_npz(tmp_path):
         )
 
 
-@pytest.mark.parametrize("parameters", [None, [], {}, "missing", [("chirp_mass", 31.0)]])
+@pytest.mark.parametrize(
+    "parameters", [None, [], {}, "missing", [("chirp_mass", 31.0)]]
+)
 def test_optional_injection_truth(tmp_path, monkeypatch, parameters):
     from gwbenchmark2g import io
 

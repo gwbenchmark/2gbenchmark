@@ -37,7 +37,7 @@ missing event row raises an error.
 Run this in the environment that has **bilby 2.7.1**, **bilby_pipe** and
 **gwbenchmark2g** installed together. bilby has to be 2.7.1 because that's the
 version the data was generated with, and gwbenchmark2g is needed to open the
-npz files. 
+npz files.
 
 ## How to run it
 
@@ -101,7 +101,7 @@ directory instead of the image's `PATH`.
 
 ## A few things to know
 
-- **The npz directory goes on the command line, not in the `.ini`.** Kept out of 
+- **The npz directory goes on the command line, not in the `.ini`.** Kept out of
   config on purpose so the config is just about analysis settings.
 - **The recovery prior is the same one the data was generated with.** It lives
   in `level0_recovery.prior`. If generation prior is changed, must rebuild it
