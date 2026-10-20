@@ -248,3 +248,15 @@ def test_simulate_level1_invalid_config():
         ValueError, match="Config level must be 1 for level 1 simulation."
     ):
         next(simulate.simulate_level_1(cfg))
+
+
+@pytest.mark.parametrize("config_class", [config.Level0Config, config.Level1Config])
+def test_custom_distance_range(config_class):
+    cfg = config_class(seed=42, n_simulations=3, distance_range=[1000.0, 1100.0])
+    simulate_fn = simulate.simulate_registry[cfg.level]
+    distances = [
+        metadata.injection_parameters["luminosity_distance"]
+        for _, metadata in simulate_fn(cfg)
+    ]
+    assert all(1000.0 <= distance <= 1100.0 for distance in distances)
+    assert len(set(distances)) > 1

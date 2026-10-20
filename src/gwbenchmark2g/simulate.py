@@ -69,7 +69,9 @@ def _simulate_dataset(
     bilby.core.utils.random.seed(config.seed)
     dist = bilby.gw.prior.BBHPriorDict(aligned_spin=True)
     dist["luminosity_distance"] = bilby.gw.prior.UniformSourceFrame(
-        name="luminosity_distance", minimum=1750.0, maximum=2250.0
+        name="luminosity_distance",
+        minimum=config.distance_range[0],
+        maximum=config.distance_range[1],
     )
 
     if config.geocent_time_range is not None:

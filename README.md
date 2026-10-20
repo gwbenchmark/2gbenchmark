@@ -98,6 +98,17 @@ Each Level 1 simulation may contain a different detector subset. The selected
 network is recorded in the metadata as `network_label`, and the strain file only
 contains the detectors active for that simulation.
 
+To set the luminosity-distance range for either level, add `distance_range`
+to the YAML configuration (minimum and maximum in Mpc):
+
+```yaml
+distance_range: [1000.0, 3000.0]
+```
+
+The default is `[1750.0, 2250.0]`. Bounds must be finite, positive, and strictly
+increasing. Distances follow the existing `UniformSourceFrame` prior within
+these bounds. A fixed `luminosity_distance` in `fixed_parameters` takes precedence.
+
 ## Output format
 
 The output directory will contain:

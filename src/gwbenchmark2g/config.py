@@ -3,7 +3,10 @@
 This may move to gwbenchmark in the future.
 """
 
+from math import isfinite
+
 import numpy as np
+
 from pydantic import BaseModel, computed_field, field_validator
 
 
@@ -35,8 +38,21 @@ class DatasetConfig(BaseModel):
     blind: bool = False
     n_simulations: int
     fixed_parameters: dict[str, float] | None = None
+    distance_range: tuple[float, float] = (1750.0, 2250.0)
     geocent_time_range: tuple[float, float] | None = None
     detectors: list[str] | DetectorNetworkConfig
+
+    @field_validator("distance_range")
+    @classmethod
+    def validate_distance_range(cls, value: tuple[float, float]) -> tuple[float, float]:
+        minimum, maximum = value
+        if not all(isfinite(bound) for bound in value):
+            raise ValueError("distance_range bounds must be finite.")
+        if not 0 < minimum < maximum:
+            raise ValueError(
+                "distance_range must satisfy 0 < minimum < maximum (in Mpc)."
+            )
+        return value
 
 
 class Level0Config(DatasetConfig):
