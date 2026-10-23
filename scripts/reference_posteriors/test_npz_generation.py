@@ -82,3 +82,42 @@ def test_strain_and_psd_match_npz(tmp_path):
         np.testing.assert_array_equal(
             ifo.power_spectral_density.psd_array, source[ifo.name].psd
         )
+
+
+@pytest.mark.parametrize(
+    "parameters", [None, [], {}, "missing", [("chirp_mass", 31.0)]]
+)
+def test_optional_injection_truth(tmp_path, monkeypatch, parameters):
+    from gwbenchmark2g import io
+
+    (tmp_path / "injection_metadata.parquet").touch()
+    calls = []
+
+    def read_metadata(path, idx):
+        calls.append((path, idx))
+        return {} if parameters == "missing" else {"injection_parameters": parameters}
+
+    monkeypatch.setattr(io, "read_single_metadata_raw", read_metadata)
+    inputs = NpzDataGenerationInput.__new__(NpzDataGenerationInput)
+    inputs.npz_directory = tmp_path
+    inputs.idx = 3
+    inputs.calibration_model = None
+    inputs.meta_data = {"injection_parameters": None}
+    inputs.injection_parameters = None
+    inputs._load_injection_parameters()
+
+    expected = dict(parameters) if parameters and parameters != "missing" else None
+    assert inputs.injection_parameters == expected
+    assert inputs.meta_data["injection_parameters"] == expected
+    assert calls == [(tmp_path / "injection_metadata.parquet", 3)]
+
+
+def test_missing_metadata_file_leaves_truth_unset(tmp_path):
+    inputs = NpzDataGenerationInput.__new__(NpzDataGenerationInput)
+    inputs.npz_directory = tmp_path
+    inputs.calibration_model = None
+    inputs.meta_data = {"injection_parameters": None}
+    inputs.injection_parameters = None
+    inputs._load_injection_parameters()
+    assert inputs.injection_parameters is None
+    assert inputs.meta_data["injection_parameters"] is None

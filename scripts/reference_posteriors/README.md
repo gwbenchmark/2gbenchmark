@@ -7,12 +7,37 @@ posteriors come from exactly the data we published.
 
 Everything else (the sampler, plots, job submission) is just normal bilby_pipe.
 
+## Existing signals and result metadata
+
+The NPZ strain already contains the injected signal and noise. Recovery reads
+that strain unchanged; it does not inject another signal or generate new noise.
+Keep these settings in `level0.ini`:
+
+```ini
+gaussian-noise = True
+injection = False
+```
+
+Here `gaussian-noise = True` selects the bilby_pipe method that our NPZ loader
+overrides. That method reads the saved strain and PSDs instead of generating
+noise.
+
+For non-blind data, the loader also reads the true parameter values from row
+`idx` of `injection_metadata.parquet`, matching `simulation_<idx>.npz`. After
+loading the strain, it records these values as `injection_parameters` in the
+result metadata for p–p plots. This only records the truth; it does not change
+the strain or enable signal injection.
+
+Blinded datasets with null, empty or absent `injection_parameters`, and datasets
+without a metadata file, still run with truth unset. Unreadable metadata or a
+missing event row raises an error.
+
 ## What you need
 
 Run this in the environment that has **bilby 2.7.1**, **bilby_pipe** and
 **gwbenchmark2g** installed together. bilby has to be 2.7.1 because that's the
 version the data was generated with, and gwbenchmark2g is needed to open the
-npz files. 
+npz files.
 
 ## How to run it
 
@@ -50,6 +75,14 @@ python run_reference_posteriors.py level0.ini --npz-directory /path/to/level0 \
   set by the cluster, so the npz directory and this folder need to be on a
   filesystem the cluster mounts into containers. `--bind` does nothing here.
   The script prints a warning listing the folders that need to be visible.
+  For this shared-filesystem setup, pass `--transfer-files False`; the custom
+  loader does not stage its script or NPZ inputs for file-transfer jobs.
+  The image and output directory must also be accessible on the workers.
+  On pools configured with `SINGULARITY_BIND_EXPR = TARGET.SingularityBind`,
+  use `--condor-bind /path/to/level0` to request the dataset mount (repeatable).
+  This writes `+SingularityBind` in every job's submit file; the source paths
+  must exist on the execute nodes. It does not transfer files. This option
+  depends on the pool configuration, unlike Slurm's direct `--bind` option.
 - **Slurm** (`scheduler = slurm`): each job script runs its command through
   `apptainer exec`. The npz directory, this folder and the run directory are
   bound automatically; add `--bind PATH` (repeatable) for anything else. The
@@ -62,10 +95,13 @@ set `conda-env`.
 Run `run_reference_posteriors.py` itself inside the same image, e.g.
 `apptainer exec image.sif python run_reference_posteriors.py ...`, then submit
 from the host, since `sbatch`/`condor_submit_dag` aren't in the container.
+The wrapper records absolute executable paths from that image for Condor;
+bare names such as `python` can otherwise be resolved under Condor's scratch
+directory instead of the image's `PATH`.
 
 ## A few things to know
 
-- **The npz directory goes on the command line, not in the `.ini`.** Kept out of 
+- **The npz directory goes on the command line, not in the `.ini`.** Kept out of
   config on purpose so the config is just about analysis settings.
 - **The recovery prior is the same one the data was generated with.** It lives
   in `level0_recovery.prior`. If generation prior is changed, must rebuild it
@@ -83,3 +119,10 @@ from the host, since `sbatch`/`condor_submit_dag` aren't in the container.
 - `level0.ini` – all the analysis settings (detectors, sampler, waveform, ...).
 - `build_prior.py` / `level0_recovery.prior` – the recovery prior.
 - `test_npz_generation.py` – a quick check that the strain is read in correctly.
+
+## Continuing a partial run
+
+`--start-index 100 --n-simulation 900` selects `simulation_100.npz` through
+`simulation_999.npz`, including the corresponding metadata rows and job labels.
+Use a separate label and outdir so the completed first 100 stay available.
+`--start-index` is a wrapper CLI option, rather than a bilby_pipe INI setting.

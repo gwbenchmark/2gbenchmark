@@ -21,18 +21,86 @@ directories the jobs need to see). On HTCondor this uses bilby_pipe's own
 """
 
 import argparse
+import json
 import os
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
 from bilby_pipe.job_creation.dag import Dag
+from bilby_pipe.job_creation.node import Node
 from bilby_pipe.job_creation.nodes.generation_node import GenerationNode
 from bilby_pipe.job_creation.slurm import SubmitSLURM
 from bilby_pipe.main import main as bilby_pipe_main
 from bilby_pipe.utils import BilbyPipeError, logger
 
 NPZ_GENERATION = str(Path(__file__).resolve().parent / "npz_generation.py")
+
+
+def use_start_index(start_index):
+    """Offset generation indices, including labels and metadata row selection."""
+    base_init = GenerationNode.__init__
+
+    def init(self, inputs, trigger_time, idx, dag, parent=None):
+        base_init(self, inputs, trigger_time, idx + start_index, dag, parent=parent)
+
+    GenerationNode.__init__ = init
+
+
+def use_resolved_outdir():
+    """Keep job output paths consistent with bilby_pipe's chosen run directory."""
+    base_setup_arguments = Node.setup_arguments
+
+    def setup_arguments(self, *args, **kwargs):
+        base_setup_arguments(self, *args, **kwargs)
+        # bilby_pipe may suffix an existing outdir with _A, _B, etc. Its
+        # replayed command-line arguments still contain the original path.
+        # Override that stale value for jobs which consume the analysis INI.
+        add_ini = kwargs.get("add_ini", args[2] if len(args) > 2 else True)
+        if add_ini:
+            self.arguments.add("outdir", self.inputs.outdir)
+
+    Node.setup_arguments = setup_arguments
+
+
+def use_condor_binds(binds):
+    """Request mounts on pools using SINGULARITY_BIND_EXPR=TARGET.SingularityBind."""
+    base_create_job = Node.create_pycondor_job
+
+    def create_job(self):
+        if (
+            self.inputs.scheduler.lower() == "condor"
+            and self.inputs.container is not None
+        ):
+            self.extra_lines.append("+SingularityBind = " + json.dumps(" ".join(binds)))
+        return base_create_job(self)
+
+    Node.create_pycondor_job = create_job
+
+
+def use_container_executables():
+    """Use image-absolute executables: Condor does not search the image PATH.
+
+    Build the workflow inside the same image used by the jobs so which()
+    resolves paths in that image rather than on the submission host.
+    """
+    base_get_executable_path = Node._get_executable_path
+
+    def _get_executable_path(self, exe_name):
+        if (
+            self.inputs.container is not None
+            and self.inputs.scheduler.lower() == "condor"
+        ):
+            executable = shutil.which(exe_name)
+            if executable is None:
+                raise BilbyPipeError(
+                    f"Cannot find {exe_name}. Build the workflow inside the job image."
+                )
+            return os.path.abspath(executable)
+        return base_get_executable_path(self, exe_name)
+
+    Node._get_executable_path = _get_executable_path
 
 
 def use_npz_generation(npz_directory):
@@ -103,12 +171,32 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--npz-directory", required=True)
     parser.add_argument("--container", default=None)
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="First NPZ index; n-simulation specifies the number of events",
+    )
     parser.add_argument("--bind", action="append", default=[])
+    parser.add_argument(
+        "--condor-bind",
+        action="append",
+        default=[],
+        help="Request a mount via the pool-specific SingularityBind job attribute",
+    )
     args, remaining = parser.parse_known_args()
+    if args.start_index < 0:
+        parser.error("--start-index must be nonnegative")
 
+    if args.start_index:
+        use_start_index(args.start_index)
+    use_resolved_outdir()
     use_npz_generation(args.npz_directory)
 
     if args.container is not None:
+        use_container_executables()
+        if args.condor_bind:
+            use_condor_binds([os.path.abspath(path) for path in args.condor_bind])
         container = args.container
         if os.path.exists(container):
             # A local image file; leave URIs such as docker:// untouched.

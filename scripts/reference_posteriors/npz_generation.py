@@ -44,6 +44,29 @@ class NpzDataGenerationInput(DataGenerationInput):
         # data generation, which calls our override and needs this path.
         self.npz_directory = Path(npz_directory)
         super().__init__(args, unknown_args, create_data=create_data)
+        self._load_injection_parameters()
+
+    def _load_injection_parameters(self):
+        """Attach available truth without requiring it for blinded datasets."""
+        metadata_file = self.npz_directory / "injection_metadata.parquet"
+        if not metadata_file.is_file():
+            logger.info(
+                "No injection metadata file; leaving injection parameters unset"
+            )
+            return
+
+        from gwbenchmark2g.io import read_single_metadata_raw
+
+        metadata = read_single_metadata_raw(metadata_file, self.idx)
+        parameters = metadata.get("injection_parameters")
+        if not parameters:
+            logger.info("No injection truth for event %s; leaving it unset", self.idx)
+            return
+
+        # The setter also updates meta_data, which is saved in the data dump
+        # and passed to bilby's sampler by the analysis job. Arrow maps may
+        # be returned as lists of pairs rather than dictionaries.
+        self.injection_parameters = dict(parameters)
 
     def _set_interferometers_from_gaussian_noise(self):
         npz_file = self.npz_directory / f"simulation_{self.idx}.npz"
