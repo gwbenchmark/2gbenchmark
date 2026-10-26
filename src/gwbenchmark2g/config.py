@@ -40,6 +40,7 @@ class DatasetConfig(BaseModel):
     fixed_parameters: dict[str, float] | None = None
     distance_range: tuple[float, float] = (1750.0, 2250.0)
     geocent_time_range: tuple[float, float] | None = None
+    trigger_time_range: tuple[float, float] | None = None
     detectors: list[str] | DetectorNetworkConfig
 
     @field_validator("distance_range")
@@ -77,6 +78,7 @@ class Level1Config(DatasetConfig):
     waveform_approximant: str = "IMRPhenomXHM"
     fixed_parameters: dict[str, float] | None = None
     geocent_time_range: tuple[float, float] = (-0.1, 0.1)
+    trigger_time_range: tuple[float, float] = (0.0, 86164.0905)
     detectors: DetectorNetworkConfig = DetectorNetworkConfig(
         detector_combinations=[
             ("H1", "L1", "V1"),
