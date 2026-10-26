@@ -30,6 +30,7 @@ def test_simulate_blinding(LevelConfig):
     simulate_fn = getattr(simulate, f"simulate_level_{cfg.level}")
     for data, metadata in simulate_fn(cfg):
         assert metadata.injection_parameters is None
+        assert metadata.trigger_time is not None
 
 
 def test_level0_fixed_parameters():
@@ -234,6 +235,16 @@ def test_simulate_level1():
     assert len(detector_combinations) > 1, (
         "Expected multiple different detector combinations in the simulations"
     )
+
+
+def test_simulate_level1_trigger_time():
+    cfg = config.Level1Config(seed=42, n_simulations=5)
+    trigger_times = []
+    for _, metadata in simulate.simulate_level_1(cfg):
+        offset = metadata.injection_parameters["geocent_time"] - metadata.trigger_time
+        assert -0.1 <= offset <= 0.1
+        trigger_times.append(metadata.trigger_time)
+    assert len(set(trigger_times)) > 1
 
 
 def test_simulate_level1_invalid_config():
