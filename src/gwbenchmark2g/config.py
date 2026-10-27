@@ -32,6 +32,7 @@ class DetectorNetworkConfig(BaseModel):
 
 class DatasetConfig(BaseModel):
     duration: float = 4.0
+    post_trigger_duration: float = 2.0
     sampling_frequency: float = 2048.0
     waveform_approximant: str = "IMRPhenomXAS"
     seed: int

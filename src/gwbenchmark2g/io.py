@@ -65,6 +65,8 @@ INJECTION_METADATA_SCHEMA = pa.schema(
         # float | None
         pa.field("trigger_time", pa.float64(), nullable=True),
         # float | None
+        pa.field("post_trigger_duration", pa.float64(), nullable=True),
+        # float | None
         pa.field("network_optimal_snr", pa.float64(), nullable=True),
         # float | None
         pa.field("network_matched_filter_snr", pa.float64(), nullable=True),

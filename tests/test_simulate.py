@@ -247,6 +247,14 @@ def test_simulate_level1_trigger_time():
     assert len(set(trigger_times)) > 1
 
 
+@pytest.mark.parametrize("LevelConfig", [config.Level0Config, config.Level1Config])
+def test_post_trigger_duration_in_metadata(LevelConfig):
+    cfg = LevelConfig(seed=42, n_simulations=2, post_trigger_duration=1.0, blind=True)
+    simulate_fn = simulate.simulate_registry[cfg.level]
+    for _, metadata in simulate_fn(cfg):
+        assert metadata.post_trigger_duration == 1.0
+
+
 def test_simulate_level1_invalid_config():
     """Test that simulate_level_1 raises ValueError for invalid config level."""
     cfg = config.Level0Config(
