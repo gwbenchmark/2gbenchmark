@@ -60,10 +60,11 @@ gwbenchmark2g --config level0_config.yaml --level 0 --output-dir output_level0
 ## Quick start — generating a Level 1 dataset
 
 Level 1 extends the benchmark to randomized extrinsic parameters, higher-order
-multipoles, and mixed detector networks. The coalescence time is sampled
-uniformly in `[-0.1, 0.1]`, while the segment start follows the same convention
-as Level 0 so that the merger remains `duration - 2` seconds after segment
-start.
+multipoles, and mixed detector networks. Each simulation has its own trigger
+time, saved as `trigger_time` in the metadata, and the coalescence time is
+sampled uniformly within 0.1 s of it. The segment starts at
+`trigger_time - duration + post_trigger_duration`, where
+`post_trigger_duration` defaults to 2 s.
 
 Create a YAML configuration file, e.g. `level1_config.yaml`:
 
@@ -174,6 +175,8 @@ simulation with the following fields:
 | `sampling_frequency`     | `float64`                       | Sampling rate in Hz                                                     |
 | `level`                  | `int64`                         | Benchmark level used for the simulation                                 |
 | `network_label`          | `string`                        | Detector network selected for this simulation                           |
+| `trigger_time`           | `float64`                       | Trigger time; segment starts at `trigger_time - duration + post_trigger_duration` (not blinded) |
+| `post_trigger_duration`  | `float64`                       | Seconds of data after the trigger time (not blinded)                    |
 
 The `injection_parameters` dictionary contains the physical parameters of the
 simulated source. For Level 0, the free (non-fixed) parameters are:

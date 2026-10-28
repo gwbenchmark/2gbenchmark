@@ -35,6 +35,8 @@ class InjectionMetaData:
     sampling_frequency: float
     level: int | None = None
     network_label: str | None = None
+    trigger_time: float | None = None
+    post_trigger_duration: float | None = None
     network_optimal_snr: float | None = None
     network_matched_filter_snr: float | None = None
 
@@ -99,11 +101,19 @@ def _simulate_dataset(
         ifos = _get_ifos(tuple(detectors))
 
         parameters = dist.sample()
-        wfg.start_time = parameters["geocent_time"] - config.duration + 2
+        if config.trigger_time_range is not None:
+            trigger_time = bilby.core.utils.random.rng.uniform(
+                *config.trigger_time_range
+            )
+            parameters["geocent_time"] += trigger_time
+        else:
+            trigger_time = parameters["geocent_time"]
+        start_time = trigger_time - config.duration + config.post_trigger_duration
+        wfg.start_time = start_time
         ifos.set_strain_data_from_power_spectral_densities(
             duration=config.duration,
             sampling_frequency=config.sampling_frequency,
-            start_time=parameters["geocent_time"] - config.duration + 2,
+            start_time=start_time,
         )
         ifos.inject_signal(waveform_generator=wfg, parameters=parameters)
 
@@ -130,6 +140,8 @@ def _simulate_dataset(
             duration=config.duration,
             fixed_parameters=config.fixed_parameters,
             sampling_frequency=config.sampling_frequency,
+            trigger_time=trigger_time,
+            post_trigger_duration=config.post_trigger_duration,
             network_optimal_snr=network_optimal_snr,
             network_matched_filter_snr=network_matched_filter_snr,
         )
