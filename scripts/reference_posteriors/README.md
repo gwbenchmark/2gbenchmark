@@ -1,9 +1,9 @@
-# Reference posteriors for the level 0 dataset
+# Reference posteriors for the level 0 and level 1 datasets
 
-These scripts run bilby_pipe on the level 0 benchmark events to produce the
-reference posteriors. The one unusual thing is that the strain isn't simulated:
-each event is read straight from its `simulation_<idx>.npz` file, so the
-posteriors come from exactly the data we published.
+These scripts run bilby_pipe on the level 0 and level 1 benchmark events to
+produce the reference posteriors. The one unusual thing is that the strain isn't
+simulated: each event is read straight from its `simulation_<idx>.npz` file, so
+the posteriors come from exactly the data we published.
 
 Everything else (the sampler, plots, job submission) is just normal bilby_pipe.
 
@@ -11,7 +11,7 @@ Everything else (the sampler, plots, job submission) is just normal bilby_pipe.
 
 The NPZ strain already contains the injected signal and noise. Recovery reads
 that strain unchanged; it does not inject another signal or generate new noise.
-Keep these settings in `level0.ini`:
+Keep these settings in every `.ini`:
 
 ```ini
 gaussian-noise = True
@@ -32,33 +32,75 @@ Blinded datasets with null, empty or absent `injection_parameters`, and datasets
 without a metadata file, still run with truth unset. Unreadable metadata or a
 missing event row raises an error.
 
+## Per-event trigger times and detectors (level 1)
+
+Level 1 events each have their own trigger time and detector network (H1L1V1,
+H1L1 or H1). When the workflow is built, `run_reference_posteriors.py` reads
+both from `injection_metadata.parquet`:
+
+- each generation job gets that event's `--trigger-time`, which sets the
+  segment start (`trigger_time + post-trigger-duration - duration`) and the
+  `geocent_time` prior;
+- only the detectors in the event's npz file are loaded, and its analysis job
+  gets those `--detectors` and a label ending in them (e.g. `..._analysis_H1`).
+
+`geocent_time` is left out of `level1_recovery.prior`, so bilby_pipe adds
+`Uniform(trigger_time - deltaT/2, trigger_time + deltaT/2)` for each event. With
+`deltaT = 0.2` (set in the level 1 `.ini` files) that is exactly the generation
+prior, `trigger_time + Uniform(-0.1, 0.1)`. Don't set `trigger-time` in a
+level 1 `.ini`: the build stops if it disagrees with the metadata.
+
+For level 0 nothing changes: every event uses the `.ini` `trigger-time` (which
+matches the metadata, where present) and all three detectors.
+
+Each generation job also checks its trigger time and loaded detectors against
+the event's metadata row, and raises if they disagree.
+
 ## What you need
 
 Run this in the environment that has **bilby 2.7.1**, **bilby_pipe** and
 **gwbenchmark2g** installed together. bilby has to be 2.7.1 because that's the
 version the data was generated with, and gwbenchmark2g is needed to open the
-npz files.
+npz files and the metadata (also when building the workflow). The `2g-pe`
+image from `gwbenchmark/containers` has all three.
 
 ## How to run it
 
-From inside this folder (the `.ini` points at `level0_recovery.prior` with a
-relative path, so it matters where you are):
+From inside this folder (the `.ini` points at its prior with a relative path,
+and its `outdir` has to be inside the folder you run from, so it matters where
+you are):
+
+| Dataset | `.ini` |
+|---|---|
+| level 0 | `level0.ini` |
+| level 1 | `level1.ini` |
+| level 1 blind | `level1-blind.ini` |
 
 ```bash
-python run_reference_posteriors.py level0.ini --npz-directory /path/to/level0_data/level0
+python run_reference_posteriors.py level1.ini --npz-directory /path/to/level1
 ```
 
 That builds the workflow but doesn't run anything yet. It prints the submit
 command, which is just:
 
 ```bash
-sbatch outdir_level0/submit/slurm_level0_master.sh
+sbatch outdir_level1/submit/slurm_level1_master.sh
 ```
 
-and that launches the 1000 jobs on the cluster. Results land in `outdir_level0/`.
+and that launches one job per event on the cluster. Results land in
+`outdir_level1/`.
 
-If you want to try it on a couple of events first, drop `n-simulation` in
-`level0.ini` to e.g. 2 before running.
+If you want to try it on a couple of events first, drop `n-simulation` in the
+`.ini` to e.g. 2 before running.
+
+## Blinded data
+
+Use `level1-blind.ini` with the `level1-blind` data. It differs from
+`level1.ini` only in its label and outdir, so blind results can't land in the
+unblinded outdir. The blind metadata has no truth, so none is attached to the
+results. The blind posteriors still give the hidden parameters away
+approximately, so keep `outdir_level1-blind/` under the same access control as
+the unblinded truth.
 
 ## Running inside a container
 
@@ -103,26 +145,33 @@ directory instead of the image's `PATH`.
 
 - **The npz directory goes on the command line, not in the `.ini`.** Kept out of
   config on purpose so the config is just about analysis settings.
-- **The recovery prior is the same one the data was generated with.** It lives
-  in `level0_recovery.prior`. If generation prior is changed, must rebuild it
-  with `python build_prior.py`.
-- **One trigger time is used for every event.** This is fine for level 0 because
-  all the events share the same merger time, but it won't be true for level 1,
-  so that will need handling differently when we get there.
-- The waveform for recovery is **IMRPhenomXAS**, matching the (to be regenerated)
-  level 0 events. Change `waveform-approximant` in the `.ini` if that changes.
+- **The recovery prior is the same one the data was generated with.** If the
+  generation prior changes, rebuild it. Level 0 uses the defaults:
+  `python build_prior.py`. Level 1 is built from the dataset config in the
+  `gwbenchmark/configs` repo (or the `config.yaml` saved with the data):
+  `python build_prior.py --dataset-config /path/to/configs/gwbenchmark2g/level1.yaml --level 1`.
+  The committed `level1_recovery.prior` was built from `level1.yaml` at
+  `configs` commit `083ac38`; `level1-blind.yaml` gives the same file.
+- **Keep the outdir inside this folder.** With bilby_pipe's default file
+  transfer, a `--outdir` outside the folder you run from fails when the
+  workflow is built.
+- The waveform for recovery is **IMRPhenomXAS** for level 0 and
+  **IMRPhenomXHM** for level 1, matching the data.
 
 ## What's in here
 
 - `npz_generation.py` – the bit that reads the npz strain into bilby_pipe.
 - `run_reference_posteriors.py` – the script you actually run.
-- `level0.ini` – all the analysis settings (detectors, sampler, waveform, ...).
-- `build_prior.py` / `level0_recovery.prior` – the recovery prior.
-- `test_npz_generation.py` – a quick check that the strain is read in correctly.
+- `level0.ini`, `level1.ini`, `level1-blind.ini` – all the analysis settings
+  (detectors, sampler, waveform, ...).
+- `build_prior.py` / `level0_recovery.prior` / `level1_recovery.prior` – the
+  recovery priors.
+- `test_*.py` – tests for the loader, the workflow and the prior builder.
 
 ## Continuing a partial run
 
 `--start-index 100 --n-simulation 900` selects `simulation_100.npz` through
-`simulation_999.npz`, including the corresponding metadata rows and job labels.
+`simulation_999.npz`, including the corresponding metadata rows (trigger times
+and detectors) and job labels.
 Use a separate label and outdir so the completed first 100 stay available.
 `--start-index` is a wrapper CLI option, rather than a bilby_pipe INI setting.

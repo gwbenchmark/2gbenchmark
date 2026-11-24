@@ -14,7 +14,7 @@ import pytest
 
 pytest.importorskip("bilby_pipe")
 from bilby_pipe.data_generation import create_generation_parser
-from bilby_pipe.utils import parse_args
+from bilby_pipe.utils import BilbyPipeError, parse_args
 
 sys.path.insert(0, str(Path(__file__).parent))
 from npz_generation import NpzDataGenerationInput
@@ -26,12 +26,12 @@ TRIGGER_TIME = -0.01621880385450652
 N_FREQ = int(DURATION * SAMPLING_FREQUENCY / 2) + 1
 
 
-def write_synthetic_npz(directory, idx):
+def write_synthetic_npz(directory, idx, detectors=DETECTORS):
     """Write simulation_<idx>.npz with random strain/PSD; return the source dict."""
     rng = np.random.default_rng(idx)
     frequency_array = np.linspace(0.0, SAMPLING_FREQUENCY / 2, N_FREQ)
     data = {}
-    for det in DETECTORS:
+    for det in detectors:
         data[det] = types.SimpleNamespace(
             strain=(rng.normal(size=N_FREQ) + 1j * rng.normal(size=N_FREQ)),
             psd=rng.uniform(1e-46, 1e-44, size=N_FREQ),
@@ -41,12 +41,12 @@ def write_synthetic_npz(directory, idx):
     return data
 
 
-def write_ini(directory):
+def write_ini(directory, detectors=DETECTORS):
     ini = directory / "test.ini"
     ini.write_text(
         f"""
 trigger-time = {TRIGGER_TIME}
-detectors = [H1, L1, V1]
+detectors = [{", ".join(detectors)}]
 duration = {DURATION}
 sampling-frequency = {SAMPLING_FREQUENCY}
 minimum-frequency = 20
@@ -63,15 +63,15 @@ reference-frequency = 50
     return ini
 
 
-def test_strain_and_psd_match_npz(tmp_path):
-    source = write_synthetic_npz(tmp_path, 0)
-    ini = write_ini(tmp_path)
+def load(tmp_path, ini):
     args, unknown = parse_args(
         [str(ini), "--idx", "0", "--label", "test", "--outdir", str(tmp_path)],
         create_generation_parser(),
     )
-    inputs = NpzDataGenerationInput(args, unknown, npz_directory=tmp_path)
+    return NpzDataGenerationInput(args, unknown, npz_directory=tmp_path)
 
+
+def assert_strain_and_psd_match(inputs, source):
     for ifo in inputs.interferometers:
         # frequency_domain_strain zeros out-of-band bins, so compare in-band
         # (what the likelihood actually uses).
@@ -82,6 +82,28 @@ def test_strain_and_psd_match_npz(tmp_path):
         np.testing.assert_array_equal(
             ifo.power_spectral_density.psd_array, source[ifo.name].psd
         )
+
+
+def test_strain_and_psd_match_npz(tmp_path):
+    source = write_synthetic_npz(tmp_path, 0)
+    inputs = load(tmp_path, write_ini(tmp_path))
+    assert [ifo.name for ifo in inputs.interferometers] == DETECTORS
+    assert_strain_and_psd_match(inputs, source)
+
+
+@pytest.mark.parametrize("network", [["H1", "L1"], ["H1"]])
+def test_subset_network_loads_only_event_detectors(tmp_path, network):
+    # Level 1: the ini lists all detectors, each event holds its own network.
+    source = write_synthetic_npz(tmp_path, 0, detectors=network)
+    inputs = load(tmp_path, write_ini(tmp_path))
+    assert [ifo.name for ifo in inputs.interferometers] == network
+    assert_strain_and_psd_match(inputs, source)
+
+
+def test_npz_detector_missing_from_ini_raises(tmp_path):
+    write_synthetic_npz(tmp_path, 0)
+    with pytest.raises(BilbyPipeError, match="V1"):
+        load(tmp_path, write_ini(tmp_path, detectors=["H1", "L1"]))
 
 
 @pytest.mark.parametrize(
@@ -121,3 +143,47 @@ def test_missing_metadata_file_leaves_truth_unset(tmp_path):
     inputs._load_injection_parameters()
     assert inputs.injection_parameters is None
     assert inputs.meta_data["injection_parameters"] is None
+
+
+def write_metadata(directory, trigger_time, detectors):
+    from gwbenchmark2g.io import save_metadata
+    from gwbenchmark2g.simulate import InjectionMetaData
+
+    save_metadata(
+        [
+            InjectionMetaData(
+                injection_parameters=None,
+                fixed_parameters=None,
+                waveform_kwargs={},
+                seed=None,
+                detectors={det: {"minimum_frequency": 20.0} for det in detectors},
+                duration=DURATION,
+                sampling_frequency=SAMPLING_FREQUENCY,
+                trigger_time=trigger_time,
+                post_trigger_duration=2.0,
+            )
+        ],
+        directory / "injection_metadata.parquet",
+    )
+
+
+@pytest.mark.parametrize("trigger_time", [TRIGGER_TIME, None])
+def test_metadata_trigger_time_and_detectors_agree(tmp_path, trigger_time):
+    write_synthetic_npz(tmp_path, 0, detectors=["H1", "L1"])
+    write_metadata(tmp_path, trigger_time, ["H1", "L1"])
+    inputs = load(tmp_path, write_ini(tmp_path))
+    assert [ifo.name for ifo in inputs.interferometers] == ["H1", "L1"]
+
+
+def test_trigger_time_differing_from_metadata_raises(tmp_path):
+    write_synthetic_npz(tmp_path, 0)
+    write_metadata(tmp_path, TRIGGER_TIME + 1.0, DETECTORS)
+    with pytest.raises(BilbyPipeError, match="does not match the metadata"):
+        load(tmp_path, write_ini(tmp_path))
+
+
+def test_npz_detectors_differing_from_metadata_raise(tmp_path):
+    write_synthetic_npz(tmp_path, 0, detectors=["H1", "L1"])
+    write_metadata(tmp_path, TRIGGER_TIME, ["H1"])
+    with pytest.raises(BilbyPipeError, match="metadata lists detectors"):
+        load(tmp_path, write_ini(tmp_path))

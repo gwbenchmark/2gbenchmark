@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Run the level 0 reference-posterior workflow.
+"""Run the reference-posterior workflow for a benchmark dataset.
 
 A thin wrapper around ``bilby_pipe`` that swaps the data-generation step for
 ``npz_generation.py``, so each event's strain is read from its
 ``simulation_<idx>.npz`` file instead of being simulated. Analysis, plots,
 summary and scheduling are all standard bilby_pipe.
+
+Each event's trigger time and detector network are read from
+``injection_metadata.parquet`` in the npz directory when the workflow is built
+(level 1 events each have their own). Generation jobs get that event's
+``--trigger-time``, which sets the segment start and the ``geocent_time``
+prior, and analysis jobs get its ``--detectors`` and a matching label. Without
+them in the metadata (level 0), the ini ``trigger-time`` and ``detectors`` are
+used for every event.
 
 Usage mirrors bilby_pipe, with one extra required option::
 
@@ -27,25 +35,151 @@ import shlex
 import shutil
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
+from bilby_pipe.job_creation import bilby_pipe_dag_creator
 from bilby_pipe.job_creation.dag import Dag
 from bilby_pipe.job_creation.node import Node
+from bilby_pipe.job_creation.nodes.analysis_node import AnalysisNode
 from bilby_pipe.job_creation.nodes.generation_node import GenerationNode
 from bilby_pipe.job_creation.slurm import SubmitSLURM
 from bilby_pipe.main import main as bilby_pipe_main
 from bilby_pipe.utils import BilbyPipeError, logger
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from npz_generation import TRIGGER_TIME_TOLERANCE, metadata_detector_names
+
 NPZ_GENERATION = str(Path(__file__).resolve().parent / "npz_generation.py")
 
 
-def use_start_index(start_index):
-    """Offset generation indices, including labels and metadata row selection."""
-    base_init = GenerationNode.__init__
+class EventMetadata(NamedTuple):
+    trigger_time: float | None
+    detectors: list[str] | None
 
-    def init(self, inputs, trigger_time, idx, dag, parent=None):
-        base_init(self, inputs, trigger_time, idx + start_index, dag, parent=parent)
 
-    GenerationNode.__init__ = init
+def read_event_metadata(npz_directory):
+    """Each event's trigger time and detector names, indexed by event.
+
+    Read from ``injection_metadata.parquet``. Values missing from the metadata
+    are None; returns None if there is no metadata file.
+    """
+    metadata_file = Path(npz_directory) / "injection_metadata.parquet"
+    if not metadata_file.is_file():
+        return None
+
+    from gwbenchmark2g.io import read_metadata_raw
+
+    table = read_metadata_raw(metadata_file)
+
+    def column(name):
+        if name in table.column_names:
+            return table.column(name).to_pylist()
+        return [None] * len(table)
+
+    return [
+        EventMetadata(
+            None if trigger_time is None else float(trigger_time),
+            metadata_detector_names(detectors),
+        )
+        for trigger_time, detectors in zip(column("trigger_time"), column("detectors"))
+    ]
+
+
+def event_metadata(events, idx):
+    if events is None:
+        return EventMetadata(None, None)
+    if idx >= len(events):
+        raise BilbyPipeError(
+            f"injection_metadata.parquet has {len(events)} rows, so there is no "
+            f"metadata for event {idx}."
+        )
+    return events[idx]
+
+
+def choose_trigger_time(idx, ini_trigger_time, metadata_trigger_time):
+    """The event's metadata trigger time, falling back to the ini one."""
+    if metadata_trigger_time is None:
+        if ini_trigger_time is None:
+            raise BilbyPipeError(
+                f"No trigger time for event {idx}: set trigger-time in the ini "
+                "or provide trigger_time in the metadata."
+            )
+        return ini_trigger_time
+    if (
+        ini_trigger_time is not None
+        and abs(ini_trigger_time - metadata_trigger_time) > TRIGGER_TIME_TOLERANCE
+    ):
+        raise BilbyPipeError(
+            f"The ini trigger-time {ini_trigger_time!r} differs from the metadata "
+            f"trigger_time {metadata_trigger_time!r} for event {idx}. Remove "
+            "trigger-time from the ini to use each event's metadata trigger time."
+        )
+    return metadata_trigger_time
+
+
+def choose_network(idx, inputs, detectors, metadata_detectors):
+    """The event's own detectors, in ini order, for its analysis job."""
+    if metadata_detectors is None:
+        return detectors
+    unexpected = sorted(set(metadata_detectors) - set(inputs.detectors))
+    if unexpected:
+        raise BilbyPipeError(
+            f"Event {idx} has data for {unexpected}, which are not in the ini "
+            f"detectors {inputs.detectors}."
+        )
+    if set(metadata_detectors) == set(inputs.detectors):
+        return detectors
+    if inputs.coherence_test:
+        raise BilbyPipeError(
+            "coherence-test is not supported when events have different "
+            "detector networks."
+        )
+    return [det for det in inputs.detectors if det in metadata_detectors]
+
+
+def use_event_metadata(start_index, events):
+    """Set each event's index, trigger time and detector network.
+
+    ``start_index`` offsets the event index, including labels and metadata row
+    selection. Trigger times are chosen before any generation node is built,
+    because each node overwrites ``inputs.trigger_time`` with its own.
+    """
+    base_get_trigger_time_list = bilby_pipe_dag_creator.get_trigger_time_list
+    base_generation_init = GenerationNode.__init__
+    base_analysis_init = AnalysisNode.__init__
+
+    def get_trigger_time_list(inputs):
+        if not (inputs.gaussian_noise or inputs.zero_noise):
+            return base_get_trigger_time_list(inputs)
+        trigger_times = []
+        for i in range(inputs.n_simulation):
+            idx = i + start_index
+            trigger_times.append(
+                choose_trigger_time(
+                    idx, inputs.trigger_time, event_metadata(events, idx).trigger_time
+                )
+            )
+        return trigger_times
+
+    def generation_init(self, inputs, trigger_time, idx, dag, parent=None):
+        base_generation_init(
+            self, inputs, trigger_time, idx + start_index, dag, parent=parent
+        )
+
+    def analysis_init(
+        self, inputs, generation_node, detectors, sampler, parallel_idx, dag
+    ):
+        idx = generation_node.idx
+        detectors = choose_network(
+            idx, inputs, detectors, event_metadata(events, idx).detectors
+        )
+        base_analysis_init(
+            self, inputs, generation_node, detectors, sampler, parallel_idx, dag
+        )
+
+    bilby_pipe_dag_creator.get_trigger_time_list = get_trigger_time_list
+    GenerationNode.__init__ = generation_init
+    AnalysisNode.__init__ = analysis_init
 
 
 def use_resolved_outdir():
@@ -188,8 +322,7 @@ def main():
     if args.start_index < 0:
         parser.error("--start-index must be nonnegative")
 
-    if args.start_index:
-        use_start_index(args.start_index)
+    use_event_metadata(args.start_index, read_event_metadata(args.npz_directory))
     use_resolved_outdir()
     use_npz_generation(args.npz_directory)
 
